@@ -1,7 +1,7 @@
 import random
 import numpy as np
 import functools
-
+import sys
 import utils
 
 K = 10 #number of piles
@@ -14,7 +14,8 @@ REPEATS = 10 # number of runs of algorithm (should be at least 10)
 ELITISM = 0.07 
 ELITE_COUNT = round(POP_SIZE*ELITISM)
 OUT_DIR = 'partition' # output directory for logs
-EXP_ID = f'hw2-diffavg-tournament-popsize{POP_SIZE}-maxgen{MAX_GEN}-mutprob{MUT_PROB}-cxprob{CX_PROB}--elite{ELITISM}' # the ID of this experiment (used to create log names)
+#EXP_ID = 'test'
+EXP_ID = f'hw3-diffavg-tournament-swapmaxminbest-popsize{POP_SIZE}-maxgen{MAX_GEN}-mutprob{MUT_PROB}-cxprob{CX_PROB}--elite{ELITISM}' # the ID of this experiment (used to create log names)
 
 
 # reads the input set of values of objects
@@ -76,17 +77,6 @@ def one_pt_cross(p1, p2):
     o2 = p2[:point] + p1[point:]
     return o1, o2
 
-# implements the "bit-flip" mutation of one individual
-def flip_mutate(p, prob, upper):
-    return [random.randrange(0, upper) if random.random() < prob else i for i in p]
-
-# applies a list of genetic operators (functions with 1 argument - population) 
-# to the population
-def mate(pop, operators):
-    for o in operators:
-        pop = o(pop)
-    return pop
-
 # applies the cross function (implementing the crossover of two individuals)
 # to the whole population (with probability cx_prob)
 def crossover(pop, cross, cx_prob):
@@ -100,10 +90,54 @@ def crossover(pop, cross, cx_prob):
         off.append(o2)
     return off
 
+# implements the "bit-flip" mutation of one individual
+def flip_mutate(p, prob, upper):
+    return [random.randrange(0, upper) if random.random() < prob else i for i in p]
+
+def bucket_items_indeces(ind, bin_id):
+    return [idx for idx, b in enumerate(ind) if b == bin_id]
+
+def swap_max_min_mutate(ind, weights):
+    bw = bin_weights(weights, ind)
+    max_bin_id, min_bin_id = np.argmax(bw), np.argmin(bw)
+    max_item_idx_max_bin = max(bucket_items_indeces(ind, max_bin_id), key=lambda x: weights[x])
+    min_item_idx_min_bin = min(bucket_items_indeces(ind, min_bin_id), key=lambda x: weights[x])
+    ind[max_item_idx_max_bin] = min_bin_id
+    ind[min_item_idx_min_bin] = max_bin_id
+    return ind[:]
+
+def swap_max_min_best_mutate(ind, weights):
+    bw = bin_weights(weights, ind)
+    max_bin_id, min_bin_id = np.argmax(bw), np.argmin(bw)
+    max_bin_items = bucket_items_indeces(ind, max_bin_id)
+    min_bin_items = bucket_items_indeces(ind, min_bin_id)
+    
+    ibmax_idx, ibmin_idx = 0, 0
+    min_diff = sys.maxsize
+    for max_bin_item in max_bin_items:
+        for min_bin_item in min_bin_items:
+            diffax = bw[max_bin_id] - weights[max_bin_item] + weights[min_bin_item]
+            diffin = bw[min_bin_id] - weights[min_bin_item] + weights[max_bin_item]
+            diff = abs(diffax - diffin)
+            if diff < min_diff:
+                min_diff = diff
+                ibmax_idx, ibmin_idx = max_bin_item, min_bin_item
+    
+    ind[ibmax_idx], ind[ibmin_idx] = min_bin_id, max_bin_id
+    return ind[:] 
+
+
 # applies the mutate function (implementing the mutation of a single individual)
 # to the whole population with probability mut_prob)
 def mutation(pop, mutate, mut_prob):
     return [mutate(p) if random.random() < mut_prob else p[:] for p in pop]
+
+# applies a list of genetic operators (functions with 1 argument - population) 
+# to the population
+def mate(pop, operators):
+    for o in operators:
+        pop = o(pop)
+    return pop
 
 def elitism(pop, offspring, fitness):
     return sorted(pop, key=fitness)[-ELITE_COUNT:] + sorted(offspring, key=fitness)[ELITE_COUNT:]
@@ -148,8 +182,10 @@ if __name__ == '__main__':
     cr_ind = functools.partial(create_ind, ind_len=len(weights))
     fit = functools.partial(fitness_with_average, weights=weights)
     xover = functools.partial(crossover, cross=one_pt_cross, cx_prob=CX_PROB)
-    mut = functools.partial(mutation, mut_prob=MUT_PROB, 
-                            mutate=functools.partial(flip_mutate, prob=MUT_FLIP_PROB, upper=K))
+    mut = functools.partial(mutation, mut_prob=MUT_PROB, mutate=functools.partial(swap_max_min_best_mutate, weights=weights))
+
+    #mut = functools.partial(mutation, mut_prob=MUT_PROB, 
+    #                       mutate=functools.partial(flip_mutate, prob=MUT_FLIP_PROB, upper=K))
 
     # we can use multiprocessing to evaluate fitness in parallel
     import multiprocessing
