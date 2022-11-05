@@ -7,12 +7,15 @@ import utils
 K = 10 #number of piles
 POP_SIZE = 100 # population size
 MAX_GEN = 500 # maximum number of generations
-CX_PROB = 0.8 # crossover probability
-MUT_PROB = 0.2 # mutation probability
-MUT_FLIP_PROB = 0.1 # probability of chaninging value during mutation
+CX_PROB = 0.4 # crossover probability
+MUT_PROB = 1 # mutation probability
+MUT_FLIP_PROB = 0.002 # probability of chaninging value during mutation
 REPEATS = 10 # number of runs of algorithm (should be at least 10)
+ELITISM = 0.07 
+ELITE_COUNT = round(POP_SIZE*ELITISM)
 OUT_DIR = 'partition' # output directory for logs
-EXP_ID = 'default' # the ID of this experiment (used to create log names)
+EXP_ID = f'hw2-diffavg-tournament-popsize{POP_SIZE}-maxgen{MAX_GEN}-mutprob{MUT_PROB}-cxprob{CX_PROB}--elite{ELITISM}' # the ID of this experiment (used to create log names)
+
 
 # reads the input set of values of objects
 def read_weights(filename):
@@ -33,6 +36,16 @@ def fitness(ind, weights):
     return utils.FitObjPair(fitness=1/(max(bw) - min(bw) + 1), 
                             objective=max(bw) - min(bw))
 
+def fitness_with_average(ind, weights):
+    bw = bin_weights(weights, ind)
+    fit_value = 0
+    avg_weight = sum(bw) / len(bw)
+    for w in bw:
+        fit_value += abs(w - avg_weight)
+
+    return utils.FitObjPair(1 / (fit_value + 1),
+                            objective=max(bw) - min(bw))
+
 # creates the individual
 def create_ind(ind_len):
     return [random.randrange(0, K) for _ in range(ind_len)]
@@ -44,6 +57,17 @@ def create_pop(pop_size, create_individual):
 # the roulette wheel selection
 def roulette_wheel_selection(pop, fits, k):
     return random.choices(pop, fits, k=k)
+
+# tournament selection
+def tournament_selection(pop, fits, k):
+    selected = []
+    for _ in range(k):
+        i1, i2 = random.randrange(0, len(pop)), random.randrange(0, len(pop))
+        if fits[i1] > fits[i2]:
+            selected.append(pop[i1])
+        else: 
+            selected.append(pop[i2])
+    return selected
 
 # implements the one-point crossover of two individuals
 def one_pt_cross(p1, p2):
@@ -81,6 +105,9 @@ def crossover(pop, cross, cx_prob):
 def mutation(pop, mutate, mut_prob):
     return [mutate(p) if random.random() < mut_prob else p[:] for p in pop]
 
+def elitism(pop, offspring, fitness):
+    return sorted(pop, key=fitness)[-ELITE_COUNT:] + sorted(offspring, key=fitness)[ELITE_COUNT:]
+
 # implements the evolutionary algorithm
 # arguments:
 #   pop_size  - the initial population
@@ -107,9 +134,10 @@ def evolutionary_algorithm(pop, max_gen, fitness, operators, mate_sel, *, map_fn
 
         mating_pool = mate_sel(pop, fits, POP_SIZE)
         offspring = mate(mating_pool, operators)
-        pop = offspring[:]
+        pop = elitism(pop, offspring, fitness)[:]
 
     return pop
+
 
 if __name__ == '__main__':
     # read the weights from input
@@ -118,7 +146,7 @@ if __name__ == '__main__':
     # use `functool.partial` to create fix some arguments of the functions 
     # and create functions with required signatures
     cr_ind = functools.partial(create_ind, ind_len=len(weights))
-    fit = functools.partial(fitness, weights=weights)
+    fit = functools.partial(fitness_with_average, weights=weights)
     xover = functools.partial(crossover, cross=one_pt_cross, cx_prob=CX_PROB)
     mut = functools.partial(mutation, mut_prob=MUT_PROB, 
                             mutate=functools.partial(flip_mutate, prob=MUT_FLIP_PROB, upper=K))
@@ -139,7 +167,7 @@ if __name__ == '__main__':
         # create population
         pop = create_pop(POP_SIZE, cr_ind)
         # run evolution - notice we use the pool.map as the map_fn
-        pop = evolutionary_algorithm(pop, MAX_GEN, fit, [xover, mut], roulette_wheel_selection, map_fn=pool.map, log=log)
+        pop = evolutionary_algorithm(pop, MAX_GEN, fit, [xover, mut], tournament_selection, map_fn=pool.map, log=log)
         # remember the best individual from last generation, save it to file
         bi = max(pop, key=fit)
         best_inds.append(bi)
