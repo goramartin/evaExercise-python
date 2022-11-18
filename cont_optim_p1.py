@@ -13,7 +13,7 @@ MUT_PROB = 0.2 # mutation probability
 MUT_STEP = 0.5 # size of the mutation steps
 REPEATS = 10 # number of runs of algorithm (should be at least 10)
 OUT_DIR = 'continuous' # output directory for logs
-EXP_ID = 'default' # the ID of this experiment (used to create log names)
+EXP_ID = 'P1AdaptiveOneFifthMut+UniformCX' # the ID of this experiment (used to create log names)
 AR_CX_WEIGHT = 0.75
 AD_MUT_C = 0.8
 
@@ -66,10 +66,14 @@ class Mutation:
     
     def __init__(self, step_size, fitness):
         self.step_size = step_size
+        self.init_step_size = step_size
         self.fit = fitness
 
     def __call__(self, ind):
         return ind + self.step_size*np.random.normal(size=ind.shape)
+
+    def reset(self):
+        self.step_size = self.init_step_size
 
 
 class AdaptiveOneFifthMutation(Mutation):
@@ -79,10 +83,9 @@ class AdaptiveOneFifthMutation(Mutation):
         self.mut_count = 0
         self.succ_mut_count = 0
 
-
     def __call__(self, ind):
         new_ind = ind + self.step_size*np.random.normal(size=ind.shape)
-        if self.fit(new_ind).fitness > self.fit(ind).fitness:
+        if fit(new_ind).fitness > fit(ind).fitness:
             self.succ_mut_count += 1
         self.mut_count += 1
         return new_ind
@@ -96,6 +99,7 @@ class AdaptiveOneFifthMutation(Mutation):
                 self.step_size = self.step_size * AD_MUT_C
         self.succ_mut_count = 0
         self.mut_count = 0
+
 
 # applies a list of genetic operators (functions with 1 argument - population) 
 # to the population
@@ -140,6 +144,7 @@ def mutation(pop, mutate, mut_prob):
 #   log       - a utils.Log structure to log the evolution run
 def evolutionary_algorithm(pop, max_gen, fitness, operators, mate_sel, mutate_ind, *, map_fn=map, log=None):
     evals = 0
+    mutate_ind.reset()
     for G in range(max_gen):
         fits_objs = list(map_fn(fitness, pop))
         evals += len(pop)
@@ -170,8 +175,8 @@ if __name__ == '__main__':
 
     for fit_gen, fit_name in zip(fit_generators, fit_names):
         fit = fit_gen(DIMENSION)
-        mutate_ind = Mutation(step_size=MUT_STEP, fitness=fit)
-        xover = functools.partial(crossover, cross=one_pt_cross, cx_prob=CX_PROB)
+        mutate_ind = AdaptiveOneFifthMutation(step_size=MUT_STEP, fitness=fit)
+        xover = functools.partial(crossover, cross=uniform_cross, cx_prob=CX_PROB)
         mut = functools.partial(mutation, mut_prob=MUT_PROB, mutate=mutate_ind)
 
         # run the algorithm `REPEATS` times and remember the best solutions from 
