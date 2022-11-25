@@ -8,14 +8,14 @@ import utils
 DIMENSION = 10 # dimension of the problems
 POP_SIZE = 100 # population size
 MAX_GEN = 500 # maximum number of generations
-REPEATS = 1 # number of runs of algorithm (should be at least 10)
+REPEATS = 10 # number of runs of algorithm (should be at least 10)
 OUT_DIR = 'continuous' # output directory for logs
-EXP_ID = 'P2Differential' # the ID of this experiment (used to create log names)
+EXP_ID = 'P2DifferentialAdaptiveCR09-F035-FD035-CRD09' # the ID of this experiment (used to create log names)
 CR = 0.9 # Change propability
 F = 0.8 # Multiplier of difference
 DIFF_COUNT = 1
 F_DEC = 0.35
-CR_DEC = 0.8
+CR_DEC = 0.9
 
 # Velka F i moc mala nic moc nedelala, nejlepsi to bylo pro 0.55 az 0.6
 # pridavani countu bylo k nicemu

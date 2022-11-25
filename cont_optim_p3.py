@@ -8,13 +8,13 @@ import utils
 DIMENSION = 10 # dimension of the problems
 POP_SIZE = 100 # population size
 MAX_GEN = 500 # maximum number of generations
-CX_PROB = 0.8 # crossover probability
-MUT_PROB = 0.2 # mutation probability
-MUT_STEP = 0.5 # size of the mutation steps
-REPEATS = 10 # number of runs of algorithm (should be at least 10)
+CX_PROB = 0.3 # crossover probability
+MUT_PROB = 0.8 # mutation probability
+MUT_STEP = [0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001]
+REPEATS = 3 # number of runs of algorithm (should be at least 10)
 OUT_DIR = 'continuous' # output directory for logs
-EXP_ID = 'default' # the ID of this experiment (used to create log names)
-
+LOCAL_SEARCH = 10
+EXP_ID = f'P3Baldwin+Depth{LOCAL_SEARCH}+MUT{MUT_PROB}+CX{CX_PROB}+UniformCX' # the ID of this experiment (used to create log names)
 
 # creates the individual
 def create_ind(ind_len):
@@ -47,13 +47,19 @@ def one_pt_cross(p1, p2):
 
 # gaussian mutation - we need a class because we want to change the step
 # size of the mutation adaptively
-class Mutation:
+class GradientMutation:
 
-    def __init__(self, step_size):
-        self.step_size = step_size
+    def __init__(self, step_sizes, fitness):
+        self.step_sizes = step_sizes
+        self.fitness = fitness
 
     def __call__(self, ind):
-        return ind + self.step_size*np.random.normal(size=ind.shape)
+        gr = cf.numerical_derivative(fit, ind)
+        f = functools.partial(self.compute, i=ind, gr=gr)
+        return max(list(map(f, self.step_sizes)), key=self.fitness)
+
+    def compute(self, step_size, i, gr):
+        return np.copy(i) - step_size*np.copy(gr)
 
 # applies a list of genetic operators (functions with 1 argument - population) 
 # to the population
@@ -75,10 +81,23 @@ def crossover(pop, cross, cx_prob):
         off.append(o2)
     return off
 
+def uniform_cross(p1, p2):
+    for idx in range(len(p1)):
+        if random.randint(0, 1):
+            p1[idx], p2[idx] = p2[idx], p1[idx]
+    return p1[:], p2[:]
+
+
 # applies the mutate function (implementing the mutation of a single individual)
 # to the whole population with probability mut_prob)
 def mutation(pop, mutate, mut_prob):
     return [mutate(p) if random.random() < mut_prob else p[:] for p in pop]
+
+def lamarck_fitness(ind, fit, depth, mut):
+    mutated = ind
+    for _ in range(depth):
+        mutated = mut(mutated)
+    return fit(mutated)
 
 # implements the evolutionary algorithm
 # arguments:
@@ -123,12 +142,17 @@ if __name__ == '__main__':
                       cf.make_f06_attractive_sector,
                       cf.make_f08_rosenbrock,
                       cf.make_f10_rotated_ellipsoidal]
-    fit_names = ['f01', 'f02', 'f06', 'f08', 'f10']
+    fit_names = [ 
+        'f01', 
+        'f02', 
+        'f06', 'f08', 'f10']
 
     for fit_gen, fit_name in zip(fit_generators, fit_names):
         fit = fit_gen(DIMENSION)
-        mutate_ind = Mutation(step_size=MUT_STEP)
-        xover = functools.partial(crossover, cross=one_pt_cross, cx_prob=CX_PROB)
+        mutate_ind = GradientMutation(step_sizes=MUT_STEP, fitness=fit)
+        lam_fitness = functools.partial(lamarck_fitness, fit=fit, depth=LOCAL_SEARCH, mut=mutate_ind)
+
+        xover = functools.partial(crossover, cross=uniform_cross, cx_prob=CX_PROB)
         mut = functools.partial(mutation, mut_prob=MUT_PROB, mutate=mutate_ind)
 
         # run the algorithm `REPEATS` times and remember the best solutions from 
@@ -142,7 +166,7 @@ if __name__ == '__main__':
             # create population
             pop = create_pop(POP_SIZE, cr_ind)
             # run evolution - notice we use the pool.map as the map_fn
-            pop = evolutionary_algorithm(pop, MAX_GEN, fit, [xover, mut], tournament_selection, mutate_ind, map_fn=map, log=log)
+            pop = evolutionary_algorithm(pop, MAX_GEN, lam_fitness, [xover, mut], tournament_selection, mutate_ind, map_fn=map, log=log)
             # remember the best individual from last generation, save it to file
             bi = max(pop, key=fit)
             best_inds.append(bi)
