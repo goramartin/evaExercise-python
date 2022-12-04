@@ -11,13 +11,13 @@ import functools
 def add_suffix(str, suff):
     return str + '.' + suff
 
-fit_names = ['f01', 'f02', 'f06', 'f08', 'f10']
-datasets = ['default', 'P1UniformCX', 'P1ArithmeticCX', 'P1AdaptiveOneFifthMut', 'P1AdaptiveOneFifthMut+UniformCX', 'P1AdaptiveOneFifthMut+ArithmeticCX', 'P2DifferentialStaticCR09F055', 'P2DifferentialAdaptiveCR09-F035-FD035-CRD09', 'P3Baldwin+MUT0.8+CX0.3+UniformCX', 'P3Baldwin+Depth10+MUT0.8+CX0.3+UniformCX']
-fit_name = fit_names[int(sys.argv[1])]
-f = functools.partial(add_suffix, suff=fit_name)
+fit_names = ['ZDT1', 'ZDT2', 'ZDT3', 'ZDT4', 'ZDT6']
+datasets = ['default', 'default+MS0.5', 'CXUniform+DefMut+CXP0.2+MP0.8+MS0.5', 'CXUniform+DefMut+CXP0.8+MP0.2+MS0.5', 'CXArithmetics+DefMut+CXP0.8+MP0.2+MS0.5', 'CXArithmetics+DefMut+CXP0.2+MP0.8+MS0.5', 'DefCX+AdaptiveMut+CXP0.8+MP0.2+MS0.5', 'DefCX+AdaptiveMut+CXP0.8+MP0.2+MS0.05', 'CXUniform+AdaptiveMut+CXP0.8+MP0.2+MS0.5+sum', 'CXUniform+DiffMut+CXP0.8+MP0.2+MS0.5']
 
-plt.figure(figsize=(12,8))
-utils.plot_experiments('continuous', list(map(f, datasets)), {'P3Baldwin+MUT0.8+CX0.3+UniformCX': 'P3Lamarck+MUT0.8+CX0.3+UniformCX'})
-plt.yscale('log')
-plt.show()
+for name in fit_names:
+    f = functools.partial(add_suffix, suff=name)
+    plt.figure(figsize=(12,8))
+    utils.plot_experiments('multi', list(map(f, datasets)), { 'DefCX+AdaptiveMut+CXP0.8+MP0.2+MS0.5': 'CXUniform+AdaptiveMut+CXP0.8+MP0.2+MS0.5',  'DefCX+AdaptiveMut+CXP0.8+MP0.2+MS0.05': 'CXUniform+AdaptiveMut+CXP0.8+MP0.2+MS0.05' })
+    #plt.yscale('log')
+    plt.show()
  
