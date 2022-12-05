@@ -13,14 +13,14 @@ POP_SIZE = 100 # population size
 MAX_GEN = 50 # maximum number of generations
 CX_PROB = 0.8 # crossover probability
 MUT_PROB = 0.2 # mutation probability
-MUT_STEP = 0.5 # size of the mutation steps
+MUT_STEP = 0.55 # size of the mutation steps
 AD_MUT_C = 0.8 # Multiplier in adaptive stepsize
 REPEATS = 10 # number of runs of algorithm (should be at least 10)
 AR_CX_WEIGHT = 0.75
 DIFF_COUNT = 1
 F = 0.8 # Multiplier of difference
 OUT_DIR = 'multi' # output directory for logs
-EXP_ID = f'CXUniform+DiffMut+CXP{CX_PROB}+MP{MUT_PROB}+MS{MUT_STEP}' # the ID of this experiment (used to create log names)
+EXP_ID = f'HyperVolume+CXUniform+DiffAdaptiveMut+CXP{CX_PROB}+MP{MUT_PROB}+MS{MUT_STEP}' # the ID of this experiment (used to create log names)
 
 #large step size did good stuff
 
@@ -58,7 +58,7 @@ def nsga2_select(pop, k):
     fronts = mu.divide_fronts(pop)
     selected = []
     for i, f in enumerate(fronts):
-        mu.assign_crowding_distances(f)
+        mu.assign_hypervolume_addition(f)
         for ind in f:
             ind.front = i
         if len(selected) + len(f) <= k:
@@ -88,6 +88,9 @@ class DiffMutation:
         self.diff_count = diff_count
         self.F = F
         self.fit = fitness
+        self.init_f = F
+        self.mut_count = 0
+        self.succ_mut_count = 0
 
     def select_random_unique(self, idx, pop):
         while True:
@@ -102,7 +105,25 @@ class DiffMutation:
         for idx1, idx2 in zip(inds[0::2], inds[1::2]):
             a = donor.x + self.F*(copy.deepcopy(pop[idx1]).x - copy.deepcopy(pop[idx2]).x)
             np.clip(a, 0, 1, donor.x)
+        of1, of2 = self.fit(ind)
+        nf1, nf2 = self.fit(donor)
+        if nf1 >= of1 and nf2 >= of2:
+            self.succ_mut_count += 1
+        self.mut_count += 1   
         return donor
+
+    def update(self):
+        if self.mut_count != 0:
+            succ_rate = self.succ_mut_count / self.mut_count
+            if succ_rate > 0.2:
+                self.F = self.F / AD_MUT_C
+            elif succ_rate < 0.2:
+                self.F = self.F * AD_MUT_C
+        self.succ_mut_count = 0
+        self.mut_count = 0
+
+    def reset(self):
+        self.F = self.init_f
 
 # gaussian mutation - we need a class because we want to change the step
 # size of the mutation adaptively
@@ -144,7 +165,7 @@ class AdaptiveOneFifthMutation(BasicMutation):
         self.mut_count += 1
         return ind
 
-    def update_step_size(self):
+    def update(self):
         if self.mut_count != 0:
             succ_rate = self.succ_mut_count / self.mut_count
             if succ_rate > 0.2:
@@ -222,7 +243,7 @@ def mate(pop, operators):
 #   log       - a utils.Log structure to log the evolution run
 def evolutionary_algorithm(pop, max_gen, fitness, operators, mate_sel, mutate_ind, *, map_fn=map, log=None, opt_hv = np.product(mu.HYP_REF)):
     evals = 0
-    #mutate_ind.reset()
+    mutate_ind.reset()
     for G in range(max_gen):        
 
         if G == 0:
@@ -232,7 +253,7 @@ def evolutionary_algorithm(pop, max_gen, fitness, operators, mate_sel, mutate_in
             evals += len(pop)
             fronts = mu.divide_fronts(pop)
             for i,f in enumerate(fronts):
-                mu.assign_crowding_distances(f)
+                mu.assign_hypervolume_addition(f)
                 for ind in f:
                     ind.front = i
             
@@ -248,7 +269,7 @@ def evolutionary_algorithm(pop, max_gen, fitness, operators, mate_sel, mutate_in
             
         evals += len(offspring)
         pop = nsga2_select(pop + offspring, POP_SIZE)
-        #mutate_ind.update_step_size()
+        mutate_ind.update()
 
     return pop
 
@@ -263,7 +284,7 @@ if __name__ == '__main__':
     for fit_name in fit_names:
         fit = mf.get_function_by_name(fit_name)
         opt_hv = mf.get_opt_hypervolume(fit_name)
-        mutate_ind = DiffMutation(diff_count=DIFF_COUNT, F=F, fitness=fit)
+        mutate_ind = DiffMutation(diff_count=DIFF_COUNT, F=F, fitness=fit) #AdaptiveOneFifthMutation(step_size=MUT_STEP, fitness=fit) #DiffMutation(diff_count=DIFF_COUNT, F=F, fitness=fit)
         xover = functools.partial(crossover, cross=uniform_cross, cx_prob=CX_PROB)
         mut = functools.partial(mutation, mut_prob=MUT_PROB, mutate=mutate_ind)
 
